@@ -30,37 +30,37 @@
   .kpi .val{font-size:22px;font-weight:800;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kpi .val.green{color:var(--green)}
   .section-title{font-size:15px;font-weight:700;color:var(--txt-dim);margin:8px 0 18px}
-
-  /* Funil afunilado com chave lateral */
-  .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:32px 24px;margin-bottom:28px}
-  .funnel-inner{display:flex;flex-direction:column;align-items:center;gap:0}
-  .frow{display:flex;align-items:stretch;width:100%;justify-content:center}
-  .bar-col{flex:0 0 620px;max-width:620px;display:flex;justify-content:center}
-  .bar{
-    background:linear-gradient(180deg,#0b1611,#050a07);
-    border:1px solid var(--panel-line);border-top:2px solid var(--green-dark);
-    border-radius:8px;padding:15px 26px;display:flex;justify-content:space-between;align-items:center;
+  /* Funil estilo cápsula, chave à esquerda */
+  .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:40px 24px;margin-bottom:28px;overflow:hidden}
+  .funnel-inner{display:flex;flex-direction:column;align-items:center;gap:22px;position:relative}
+  .frow{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;width:100%;max-width:760px;column-gap:0}
+  /* coluna da chave (esquerda) */
+  .brace-col{display:flex;align-items:center;justify-content:flex-end;height:100%;position:relative;padding-right:6px}
+  .brace-pcts{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15;margin-right:6px}
+  .brace-pcts .p-main{font-size:15px;font-weight:800}
+  .brace-pcts .p-sub{font-size:11px;color:var(--txt-dim);font-weight:600}
+  .p-main.neutral{color:var(--neutral)}
+  .p-main.red{color:var(--red)}
+  .p-main.amber{color:var(--amber)}
+  .p-main.greenlight{color:var(--green)}
+  .p-main.greendeep{color:var(--green)}
+  .brace-col svg{display:block;flex-shrink:0}
+  /* cápsula */
+  .cap-col{display:flex;justify-content:center}
+  .cap{
+    background:linear-gradient(145deg,#12211a 0%,#0a130e 60%,#060c09 100%);
+    border:1px solid #1d3327;border-radius:40px;
+    padding:20px 34px;display:flex;align-items:center;gap:12px;
+    box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(0,230,118,.08);
     transition:width .3s;
   }
-  .bar .name{font-weight:600;font-size:15px;white-space:nowrap}
-  .bar .value{font-weight:800;font-size:19px;color:var(--green);margin-left:24px}
-  /* coluna lateral da chave */
-  .brace-col{flex:0 0 220px;display:flex;align-items:center;padding-left:14px;position:relative}
-  .brace-col svg{display:block;flex-shrink:0;height:64px}
-  .brace-col .pct{
-    font-size:15px;font-weight:800;padding:6px 13px;border-radius:20px;border:1.5px solid;
-    min-width:70px;text-align:center;margin-left:10px;
-  }
-  .brace-col .tlabel{font-size:11px;color:var(--txt-dim);white-space:nowrap;margin-left:10px}
-  .pct.neutral{color:var(--neutral);border-color:var(--neutral)}
-  .pct.red{color:var(--red);border-color:var(--red);background:rgba(255,59,82,.08)}
-  .pct.amber{color:var(--amber);border-color:var(--amber);background:rgba(255,196,0,.08)}
-  .pct.greenlight{color:var(--green);border-color:var(--green);background:rgba(0,230,118,.06)}
-  .pct.greendeep{color:#fff;border-color:var(--green);background:var(--green-dark)}
+  .cap .value{font-weight:800;font-size:20px;color:var(--green)}
+  .cap .sep{color:var(--neutral);font-weight:400;font-size:18px}
+  .cap .name{font-weight:600;font-size:16px;color:var(--txt);white-space:nowrap}
   @media(max-width:760px){
-    .bar-col{flex:1 1 auto}
-    .brace-col{flex:0 0 130px}
-    .brace-col .tlabel{display:none}
+    .frow{grid-template-columns:96px minmax(0,1fr)}
+    .cap{padding:16px 22px}
+    .cap .value{font-size:17px}.cap .name{font-size:14px}
   }
   .actions{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:24px}
   .actions h2{font-size:16px;font-weight:800;margin-bottom:4px}
@@ -197,26 +197,30 @@ function render(){
     {p:tIcPi,cls:classifyCheckoutPayment(tIcPi),l:'Checkout → Payment'},
     {p:tPiPur,cls:classifyPaymentPurchase(tPiPur),l:'Payment → Compra'},
   ];
-  const maxW=620, minW=300, n=stages.length;
-  // chave SVG vertical que abraça a lateral, com a ponta apontando pra fora
+  const maxW=560, minW=300, n=stages.length;
+  // chave "{" desenhada em SVG, apontando para a direita (abraça o vão entre etapas)
   function braceSVG(color){
-    return `<svg width="22" height="104" viewBox="0 0 22 104" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-      <path d="M4 2 C 14 2, 4 46, 20 52 C 4 58, 14 102, 4 102"
-        stroke="${color}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    return `<svg width="20" height="70" viewBox="0 0 20 70" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <path d="M14 2 C 6 2, 12 33, 2 35 C 12 37, 6 68, 14 68"
+        stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
   }
-  const colorMap={neutral:'#5a6b62',red:'#ff3b52',amber:'#ffc400',greenlight:'#00e676',greendeep:'#00a152'};
+  const colorMap={neutral:'#5a6b62',red:'#ff3b52',amber:'#ffc400',greenlight:'#00e676',greendeep:'#00e676'};
 
   let rows='';
   stages.forEach((st,i)=>{
     const w=Math.round(maxW-(maxW-minW)*(i/(n-1)));
-    const t=trans[i];
+    // a chave que aparece ANTES desta etapa é a transição da etapa anterior -> esta
+    const t = i>0 ? trans[i-1] : null;
+    const braceCell = t
+      ? `<div class="brace-pcts"><span class="p-main ${t.cls}">${fmtPct(t.p)}</span></div>${braceSVG(colorMap[t.cls])}`
+      : '';
     rows+=`<div class="frow">
-      <div class="bar-col">
-        <div class="bar" style="width:${w}px"><span class="name">${st.n}</span><span class="value">${fmtInt(st.v)}</span></div>
-      </div>
-      <div class="brace-col">
-        ${t?braceSVG(colorMap[t.cls])+`<span class="pct ${t.cls}">${fmtPct(t.p)}</span><span class="tlabel">${t.l}</span>`:''}
+      <div class="brace-col">${braceCell}</div>
+      <div class="cap-col">
+        <div class="cap" style="width:${w}px">
+          <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
+        </div>
       </div>
     </div>`;
   });
