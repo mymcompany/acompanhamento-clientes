@@ -89,6 +89,32 @@
   .welcome .enter{background:var(--green);color:#00160b;border:none;font-weight:800;font-size:15px;padding:14px 36px;border-radius:12px;cursor:pointer}
   .welcome .enter:hover{background:var(--green-dark)}
   .app-hidden{display:none}
+  /* Tabela de dados */
+  .tbl-wrap{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:24px;margin-bottom:28px;overflow-x:auto}
+  .tbl-wrap h3{font-size:14px;font-weight:700;color:var(--txt-dim);margin-bottom:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  table th,table td{text-align:right;padding:10px 14px;border-bottom:1px solid var(--panel-line);white-space:nowrap}
+  table th:first-child,table td:first-child{text-align:left}
+  table th{color:var(--txt-dim);font-weight:700;font-size:12px}
+  table td{color:var(--txt)}
+  table td.metric{font-weight:600}
+  table tr:last-child td{border-bottom:none}
+  .delta-pos{color:var(--green);font-weight:700}
+  .delta-neg{color:var(--red);font-weight:700}
+  .delta-zero{color:var(--neutral)}
+  /* Comparação: funis lado a lado */
+  .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:28px}
+  .compare-col{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:22px 14px}
+  .compare-col .col-head{text-align:center;font-weight:700;font-size:13px;color:var(--green);margin-bottom:14px}
+  .compact .funnel{background:transparent;border:none;padding:0;margin:0}
+  .compact .cap{padding:11px 14px;border-radius:12px}
+  .compact .cap .value{font-size:15px}
+  .compact .cap .sep{font-size:14px}
+  .compact .cap .name{font-size:12px}
+  .compact .rate{padding:5px 0}
+  .compact .rate .pill{font-size:11px;padding:3px 9px}
+  .compact .rate .pill .lbl{display:none}
+  @media(max-width:720px){.compare-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -118,6 +144,12 @@
   <input type="date" id="dateStart"><span>até</span><input type="date" id="dateEnd">
   <button class="ghost" id="applyDates">Aplicar</button>
   <button class="ghost" id="last30">Últimos 30d</button>
+  <button class="ghost" id="compareToggle">Modo comparação</button>
+</div>
+<div class="date-row app-hidden" id="dateRowB">
+  <span>Período B:</span>
+  <input type="date" id="dateStartB"><span>até</span><input type="date" id="dateEndB">
+  <button class="ghost" id="applyCompare">Comparar</button>
 </div>
 <div id="content"><div class="empty">Carregando…</div></div>
 </div>
@@ -154,8 +186,10 @@ function buildParsed(rows){
 function brToDate(s){const[d,m,y]=s.split('/').map(Number);return new Date(y,m-1,d);}
 function aggregate(sd,ed){const m=parsed.metrics,ds=parsed.dates,sum={};
   WANT.forEach(k=>sum[k]=0);
+  let days=0;
   ds.forEach((d,i)=>{const dt=brToDate(d.label);
-    if(dt>=sd&&dt<=ed)WANT.forEach(k=>{if(m[k])sum[k]+=m[k][i];});});
+    if(dt>=sd&&dt<=ed){days++;WANT.forEach(k=>{if(m[k])sum[k]+=m[k][i];});}});
+  sum.__days=days;
   return sum;}
 function classifyPvCheckout(p){if(p<5)return'red';if(p<=7)return'greenlight';return'greendeep';}
 function classifyCheckoutPayment(p){if(p<40)return'red';if(p<=50)return'amber';return'greenlight';}
@@ -165,56 +199,133 @@ function fmtBRL(n){return'R$ '+n.toLocaleString('pt-BR',{minimumFractionDigits:2
 function fmtPct(n){return n.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';}
 function pct(a,b){return b>0?(a/b*100):0;}
 
-function render(){
-  if(!parsed){return;}
-  const sd=brToDate(document.getElementById('dateStart').value.split('-').reverse().join('/'));
-  const ed=brToDate(document.getElementById('dateEnd').value.split('-').reverse().join('/'));
-  const s=aggregate(sd,ed);
+// deriva todas as métricas de um agregado
+function derive(s){
   const invest=s['Investimento'],imp=s['Impressões'],clk=s['Cliques'],pv=s['PageView'],
         ic=s['Initiate Checkout'],pi=s['Payment Info'],pur=s['Purchase'],rev=s['Valor da conversão'];
-  const roas=invest>0?rev/invest:0,cac=pur>0?invest/pur:0,ticket=pur>0?rev/pur:0;
-  const tImpClk=pct(clk,imp),tClkPv=pct(pv,clk),tPvIc=pct(ic,pv),tIcPi=pct(pi,ic),tPiPur=pct(pur,pi);
-  const kpis=`<div class="kpis">
-    <div class="kpi"><div class="label">Investimento</div><div class="val">${fmtBRL(invest)}</div></div>
-    <div class="kpi"><div class="label">Faturamento</div><div class="val green">${fmtBRL(rev)}</div></div>
-    <div class="kpi"><div class="label">ROAS</div><div class="val ${roas>=3?'green':''}">${roas.toFixed(2)}</div></div>
-    <div class="kpi"><div class="label">Vendas</div><div class="val">${fmtInt(pur)}</div></div>
-    <div class="kpi"><div class="label">CAC</div><div class="val">${fmtBRL(cac)}</div></div>
-    <div class="kpi"><div class="label">Ticket médio</div><div class="val">${fmtBRL(ticket)}</div></div></div>`;
-  // etapas do funil com largura afunilada (de 100% a ~46%)
+  return {invest,imp,clk,pv,ic,pi,pur,rev,days:s.__days||1,
+    roas:invest>0?rev/invest:0, cac:pur>0?invest/pur:0, ticket:pur>0?rev/pur:0,
+    tImpClk:pct(clk,imp), tClkPv:pct(pv,clk), tPvIc:pct(ic,pv), tIcPi:pct(pi,ic), tPiPur:pct(pur,pi),
+    custoPv:pv>0?invest/pv:0, custoIc:ic>0?invest/ic:0, custoPi:pi>0?invest/pi:0, cpc:clk>0?invest/clk:0};
+}
+
+const rateLabels=['Cliques / Impr.','PageView / Cliques','Checkout / PageView','Payment / Checkout','Compra / Payment'];
+
+function buildFunnel(d,compact){
   const stages=[
-    {n:'Impressões',v:imp},
-    {n:'Cliques no link',v:clk},
-    {n:'PageView',v:pv},
-    {n:'Initiate Checkout',v:ic},
-    {n:'Payment Info',v:pi},
-    {n:'Purchase',v:pur},
+    {n:'Impressões',v:d.imp},{n:'Cliques no link',v:d.clk},{n:'PageView',v:d.pv},
+    {n:'Initiate Checkout',v:d.ic},{n:'Payment Info',v:d.pi},{n:'Purchase',v:d.pur},
   ];
-  // transições entre etapas (índice = da etapa i para i+1)
   const trans=[
-    {p:tImpClk,cls:'neutral',l:'Impr → Cliques'},
-    {p:tClkPv,cls:'neutral',l:'Cliques → PageView'},
-    {p:tPvIc,cls:classifyPvCheckout(tPvIc),l:'PageView → Checkout'},
-    {p:tIcPi,cls:classifyCheckoutPayment(tIcPi),l:'Checkout → Payment'},
-    {p:tPiPur,cls:classifyPaymentPurchase(tPiPur),l:'Payment → Compra'},
+    {p:d.tImpClk,cls:'neutral'},{p:d.tClkPv,cls:'neutral'},
+    {p:d.tPvIc,cls:classifyPvCheckout(d.tPvIc)},
+    {p:d.tIcPi,cls:classifyCheckoutPayment(d.tIcPi)},
+    {p:d.tPiPur,cls:classifyPaymentPurchase(d.tPiPur)},
   ];
-  const maxW=560, minW=300, n=stages.length;
-  const rateLabels=['Cliques / Impr.','PageView / Cliques','Checkout / PageView','Payment / Checkout','Compra / Payment'];
+  const maxW=compact?300:560, minW=compact?170:300, n=stages.length;
   let rows='';
   stages.forEach((st,i)=>{
     const w=Math.round(maxW-(maxW-minW)*(i/(n-1)));
-    // pílula de taxa ANTES desta etapa (transição da anterior -> esta)
-    if(i>0){
-      const t=trans[i-1];
-      rows+=`<div class="rate"><span class="pill ${t.cls}">${fmtPct(t.p)} <span class="lbl">${rateLabels[i-1]}</span></span></div>`;
-    }
-    rows+=`<div class="cap" style="width:${w}px">
-      <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
-    </div>`;
+    if(i>0){const t=trans[i-1];
+      rows+=`<div class="rate"><span class="pill ${t.cls}">${fmtPct(t.p)} <span class="lbl">${rateLabels[i-1]}</span></span></div>`;}
+    rows+=`<div class="cap" style="width:${w}px"><span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span></div>`;
   });
-  const funnel=`<div class="section-title">Funil — jornada completa</div><div class="funnel"><div class="funnel-inner">${rows}</div></div>`;
-  document.getElementById('content').innerHTML=kpis+funnel+buildActions({tPvIc,tIcPi,tPiPur,roas,invest});
+  return `<div class="funnel"><div class="funnel-inner">${rows}</div></div>`;
 }
+
+// linhas da tabela: [rótulo, valor formatado] — funil + custos
+function tableRows(d){
+  return [
+    ['Investimento',fmtBRL(d.invest),d.invest],
+    ['Impressões',fmtInt(d.imp),d.imp],
+    ['Cliques',fmtInt(d.clk),d.clk],
+    ['PageView',fmtInt(d.pv),d.pv],
+    ['Initiate Checkout',fmtInt(d.ic),d.ic],
+    ['Payment Info',fmtInt(d.pi),d.pi],
+    ['Purchase',fmtInt(d.pur),d.pur],
+    ['Faturamento',fmtBRL(d.rev),d.rev],
+    ['ROAS',d.roas.toFixed(2),d.roas],
+    ['Ticket médio',fmtBRL(d.ticket),d.ticket],
+    ['CAC',fmtBRL(d.cac),d.cac],
+    ['CPC',fmtBRL(d.cpc),d.cpc],
+    ['Custo / PageView',fmtBRL(d.custoPv),d.custoPv],
+    ['Custo / Checkout',fmtBRL(d.custoIc),d.custoIc],
+    ['Custo / Payment',fmtBRL(d.custoPi),d.custoPi],
+  ];
+}
+// métricas de volume (soma) têm média = total/dias; métricas de razão não têm média útil
+const isVolume={'Investimento':1,'Impressões':1,'Cliques':1,'PageView':1,'Initiate Checkout':1,'Payment Info':1,'Purchase':1,'Faturamento':1};
+function fmtLike(label,val){
+  if(label==='ROAS')return val.toFixed(2);
+  if(label.startsWith('Investimento')||label.startsWith('Faturamento')||label.startsWith('Ticket')||label.startsWith('CAC')||label.startsWith('CPC')||label.startsWith('Custo'))return fmtBRL(val);
+  return fmtInt(val);
+}
+function buildTable(d){
+  const r=tableRows(d);
+  const body=r.map(([label,fmt,raw])=>{
+    const media = isVolume[label] ? fmtLike(label, raw/d.days) : '—';
+    return `<tr><td class="metric">${label}</td><td>${fmt}</td><td>${media}</td></tr>`;
+  }).join('');
+  return `<div class="tbl-wrap"><h3>Dados do período (${d.days} dia${d.days>1?'s':''})</h3>
+    <table><thead><tr><th>Métrica</th><th>Total</th><th>Média/dia</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+function buildCompareTable(a,b){
+  const ra=tableRows(a), rb=tableRows(b);
+  const body=ra.map(([label,fmtA,rawA],idx)=>{
+    const rawB=rb[idx][2], fmtB=rb[idx][1];
+    let delta='—',cls='delta-zero';
+    if(rawA>0){const dv=(rawB-rawA)/rawA*100;
+      // pra ROAS/faturamento/vendas subir é bom; pra custos subir é ruim
+      const lowerBetter=label.startsWith('CAC')||label.startsWith('CPC')||label.startsWith('Custo');
+      const good = lowerBetter ? dv<0 : dv>0;
+      cls = Math.abs(dv)<0.05?'delta-zero':(good?'delta-pos':'delta-neg');
+      delta=(dv>0?'+':'')+dv.toFixed(1)+'%';}
+    return `<tr><td class="metric">${label}</td><td>${fmtA}</td><td>${fmtB}</td><td class="${cls}">${delta}</td></tr>`;
+  }).join('');
+  return `<div class="tbl-wrap"><h3>Comparativo A × B</h3>
+    <table><thead><tr><th>Métrica</th><th>Período A</th><th>Período B</th><th>Variação</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function kpiRow(d){
+  return `<div class="kpis">
+    <div class="kpi"><div class="label">Investimento</div><div class="val">${fmtBRL(d.invest)}</div></div>
+    <div class="kpi"><div class="label">Faturamento</div><div class="val green">${fmtBRL(d.rev)}</div></div>
+    <div class="kpi"><div class="label">ROAS</div><div class="val ${d.roas>=3?'green':''}">${d.roas.toFixed(2)}</div></div>
+    <div class="kpi"><div class="label">Vendas</div><div class="val">${fmtInt(d.pur)}</div></div>
+    <div class="kpi"><div class="label">CAC</div><div class="val">${fmtBRL(d.cac)}</div></div>
+    <div class="kpi"><div class="label">Ticket médio</div><div class="val">${fmtBRL(d.ticket)}</div></div></div>`;
+}
+
+function getDates(idA,idB){
+  return [brToDate(document.getElementById(idA).value.split('-').reverse().join('/')),
+          brToDate(document.getElementById(idB).value.split('-').reverse().join('/'))];
+}
+
+function render(){
+  if(!parsed)return;
+  const [sd,ed]=getDates('dateStart','dateEnd');
+  const d=derive(aggregate(sd,ed));
+  const html = kpiRow(d)
+    + `<div class="section-title">Funil — jornada completa</div>` + buildFunnel(d,false)
+    + buildActions(d) + buildTable(d);
+  document.getElementById('content').innerHTML=html;
+}
+
+function renderCompare(){
+  if(!parsed)return;
+  const [sdA,edA]=getDates('dateStart','dateEnd');
+  const [sdB,edB]=getDates('dateStartB','dateEndB');
+  const a=derive(aggregate(sdA,edA)), b=derive(aggregate(sdB,edB));
+  const labelA=`Período A · ${document.getElementById('dateStart').value.split('-').reverse().join('/')} → ${document.getElementById('dateEnd').value.split('-').reverse().join('/')}`;
+  const labelB=`Período B · ${document.getElementById('dateStartB').value.split('-').reverse().join('/')} → ${document.getElementById('dateEndB').value.split('-').reverse().join('/')}`;
+  const html = `<div class="section-title">Funis comparados</div>
+    <div class="compare-grid">
+      <div class="compare-col compact"><div class="col-head">${labelA}</div>${buildFunnel(a,true)}</div>
+      <div class="compare-col compact"><div class="col-head">${labelB}</div>${buildFunnel(b,true)}</div>
+    </div>` + buildCompareTable(a,b);
+  document.getElementById('content').innerHTML=html;
+}
+
 function buildActions(d){
   const items=[];
   if(d.tPvIc<5)items.push(['crit','Gargalo crítico: PageView → Checkout ('+fmtPct(d.tPvIc)+')','Menos de 5% de quem chega na LP inicia o checkout. Revise proposta de valor acima da dobra, prova social, clareza da oferta e velocidade da página. Teste um CTA mais direto e reduza fricção até o botão de compra.']);
@@ -236,6 +347,15 @@ function setLast30(){if(!parsed||!parsed.dates.length)return;
   first.setDate(first.getDate()-29);
   document.getElementById('dateEnd').value=toInput(last);
   document.getElementById('dateStart').value=toInput(first);}
+// período padrão = mês atual (dia 1 até hoje). Faz o calendário abrir no mês corrente.
+function setCurrentMonth(){
+  const now=new Date();
+  const first=new Date(now.getFullYear(),now.getMonth(),1);
+  const today=toInput(now);
+  ['dateStart','dateEnd','dateStartB','dateEndB'].forEach(id=>{document.getElementById(id).max=today;});
+  document.getElementById('dateStart').value=toInput(first);
+  document.getElementById('dateEnd').value=toInput(now);
+}
 
 async function loadClient(c){
   document.getElementById('content').innerHTML='<div class="loading">Carregando dados…</div>';
@@ -244,14 +364,43 @@ async function loadClient(c){
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     const text=await resp.text();
     parsed=buildParsed(parseCSVText(text));
-    setLast30();render();
+    setCurrentMonth();render();
   }catch(e){
     document.getElementById('content').innerHTML='<div class="empty">Não foi possível carregar os dados deste cliente.<br><small>'+e.message+'</small></div>';
   }
 }
-document.getElementById('applyDates').addEventListener('click',render);
-document.getElementById('last30').addEventListener('click',()=>{setLast30();render();});
+document.getElementById('applyDates').addEventListener('click',()=>{compareMode?renderCompare():render();});
+document.getElementById('last30').addEventListener('click',()=>{setLast30();compareMode?renderCompare():render();});
 document.getElementById('clientSelect').addEventListener('change',e=>loadClient(clients[+e.target.value]));
+
+// estado do modo comparação
+let compareMode=false;
+document.getElementById('compareToggle').addEventListener('click',function(){
+  compareMode=!compareMode;
+  const rowB=document.getElementById('dateRowB');
+  if(compareMode){
+    rowB.classList.remove('app-hidden');
+    this.style.background='var(--green)';this.style.color='#00160b';this.textContent='Sair da comparação';
+    setDefaultCompareDates();
+    renderCompare();
+  }else{
+    rowB.classList.add('app-hidden');
+    this.style.background='';this.style.color='';this.textContent='Modo comparação';
+    render();
+  }
+});
+document.getElementById('applyCompare').addEventListener('click',renderCompare);
+
+// preenche período B com o mês anterior ao período A, como ponto de partida
+function setDefaultCompareDates(){
+  const sB=document.getElementById('dateStartB'), eB=document.getElementById('dateEndB');
+  if(sB.value&&eB.value)return; // não sobrescreve se já preenchido
+  const [sdA,edA]=getDates('dateStart','dateEnd');
+  const prevEnd=new Date(sdA); prevEnd.setDate(prevEnd.getDate()-1);
+  const spanDays=Math.round((edA-sdA)/86400000);
+  const prevStart=new Date(prevEnd); prevStart.setDate(prevStart.getDate()-spanDays);
+  sB.value=toInput(prevStart); eB.value=toInput(prevEnd);
+}
 document.getElementById('enterBtn').addEventListener('click',()=>{
   document.getElementById('welcome').style.display='none';
   document.getElementById('app').classList.remove('app-hidden');
