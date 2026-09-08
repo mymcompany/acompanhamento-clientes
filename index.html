@@ -24,8 +24,11 @@
   button.ghost:hover{border-color:var(--green-dark);color:var(--green)}
   button.primary{background:var(--green);color:#00160b;border-color:var(--green);font-weight:800}
   button.primary:hover{background:var(--green-dark);border-color:var(--green-dark)}
-  /* container do relatório (renderizado fora da tela, vira PDF) */
-  #reportRoot{position:fixed;left:-9999px;top:0;width:800px;background:var(--bg);padding:40px;color:var(--txt)}
+  /* container do relatório: fora da tela quando ocioso; na tela durante captura */
+  #reportRoot{position:fixed;top:0;left:-10000px;width:800px;background:#000;padding:40px;color:#e8f5ee;z-index:-1}
+  #reportRoot.capturing{left:0;z-index:9500}
+  #captureOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;align-items:center;justify-content:center;color:#00e676;font-weight:700;font-size:16px}
+  #captureOverlay.on{display:flex}
   #reportRoot .rep-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--panel-line);padding-bottom:20px;margin-bottom:26px}
   #reportRoot .rep-head h1{font-size:26px;font-weight:800}
   #reportRoot .rep-head .dot{color:var(--green)}
@@ -173,15 +176,9 @@
 
 <!-- container do relatório (fica fora da tela, é o que vira PDF) -->
 <div id="reportRoot"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script>
-// fallback: se o CDN principal falhar, carrega de outro
-if(typeof html2pdf==='undefined'){
-  var s=document.createElement('script');
-  s.src='https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
-  document.head.appendChild(s);
-}
-</script>
+<div id="captureOverlay">Gerando relatório PDF…</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
 let clients=[], parsed=null;
@@ -472,7 +469,7 @@ function worstBottleneck(d){
 // gera o relatório em PDF para o período escolhido
 function generateReport(){
   if(!parsed){alert('Dados ainda não carregados.');return;}
-  if(typeof html2pdf==='undefined'){alert('A biblioteca de PDF ainda está carregando. Aguarde alguns segundos e tente de novo.');return;}
+  if(typeof html2canvas==='undefined'||typeof window.jspdf==='undefined'){alert('As bibliotecas de PDF ainda estão carregando. Aguarde alguns segundos e tente de novo.');return;}
   const days=parseInt(document.getElementById('reportPeriod').value,10);
   const ds=parsed.dates.map(x=>brToDate(x.label));
   const last=ds[ds.length-1];
@@ -508,22 +505,44 @@ function generateReport(){
     ${buildTable(d)}
   `;
 
-  const opt={
-    margin:[8,8,8,8],
-    filename:`Relatorio_${clientName}_${periodoTxt.replace(/ /g,'_')}.pdf`,
-    image:{type:'jpeg',quality:0.95},
-    html2canvas:{scale:2,backgroundColor:'#000000',useCORS:true},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  };
   const btn=document.getElementById('genReport');
   const txt=btn.textContent; btn.textContent='Gerando…'; btn.disabled=true;
-  html2pdf().set(opt).from(root).save().then(()=>{
-    btn.textContent=txt; btn.disabled=false; root.innerHTML='';
-  }).catch(e=>{
-    btn.textContent=txt; btn.disabled=false;
-    alert('Falha ao gerar PDF: '+e.message);
-  });
+  const overlay=document.getElementById('captureOverlay');
+  overlay.classList.add('on');
+  root.classList.add('capturing');
+  const filename=`Relatorio_${clientName}_${periodoTxt.replace(/ /g,'_')}.pdf`;
+
+  function finish(){root.classList.remove('capturing');root.innerHTML='';overlay.classList.remove('on');btn.textContent=txt;btn.disabled=false;}
+
+  const opt_unused=null;
+  // espera altura estável, captura com html2canvas e monta PDF multipágina com jsPDF
+  function doCapture(tries){
+    tries=tries||0;
+    const h=root.scrollHeight;
+    setTimeout(()=>{
+      if((root.scrollHeight===h && h>200) || tries>=20){
+        html2canvas(root,{scale:2,backgroundColor:'#000000',useCORS:true,logging:false,
+          width:root.scrollWidth,height:root.scrollHeight})
+        .then(canvas=>{
+          const {jsPDF}=window.jspdf;
+          const pdf=new jsPDF('p','mm','a4');
+          const pw=pdf.internal.pageSize.getWidth();
+          const ph=pdf.internal.pageSize.getHeight();
+          const imgH=canvas.height*pw/canvas.width;
+          const img=canvas.toDataURL('image/jpeg',0.95);
+          let heightLeft=imgH, position=0;
+          pdf.addImage(img,'JPEG',0,position,pw,imgH);
+          heightLeft-=ph;
+          while(heightLeft>0){position-=ph;pdf.addPage();pdf.addImage(img,'JPEG',0,position,pw,imgH);heightLeft-=ph;}
+          pdf.save(filename);
+          finish();
+        }).catch(e=>{finish();alert('Falha ao gerar PDF: '+e.message);});
+      }else{
+        doCapture(tries+1);
+      }
+    },120);
+  }
+  requestAnimationFrame(()=>requestAnimationFrame(()=>doCapture(0)));
 }
 document.getElementById('genReport').addEventListener('click',generateReport);
 
