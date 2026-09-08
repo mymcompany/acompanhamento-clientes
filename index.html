@@ -22,6 +22,16 @@
   select:focus,input:focus{border-color:var(--green-dark)}
   button{cursor:pointer;transition:all .15s}
   button.ghost:hover{border-color:var(--green-dark);color:var(--green)}
+  button.primary{background:var(--green);color:#00160b;border-color:var(--green);font-weight:800}
+  button.primary:hover{background:var(--green-dark);border-color:var(--green-dark)}
+  /* container do relatório (renderizado fora da tela, vira PDF) */
+  #reportRoot{position:fixed;left:-9999px;top:0;width:800px;background:var(--bg);padding:40px;color:var(--txt)}
+  #reportRoot .rep-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--panel-line);padding-bottom:20px;margin-bottom:26px}
+  #reportRoot .rep-head h1{font-size:26px;font-weight:800}
+  #reportRoot .rep-head .dot{color:var(--green)}
+  #reportRoot .rep-head .meta{text-align:right;color:var(--txt-dim);font-size:12px;line-height:1.5}
+  #reportRoot .rep-title{font-size:18px;font-weight:800;margin:26px 0 4px}
+  #reportRoot .rep-sub{color:var(--txt-dim);font-size:12px;margin-bottom:16px}
   .date-row{display:flex;gap:8px;align-items:center;color:var(--txt-dim);font-size:13px;margin-bottom:22px;flex-wrap:wrap}
   .date-row input[type=date]{color-scheme:dark}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:28px}
@@ -145,6 +155,13 @@
   <button class="ghost" id="applyDates">Aplicar</button>
   <button class="ghost" id="last30">Últimos 30d</button>
   <button class="ghost" id="compareToggle">Modo comparação</button>
+  <select id="reportPeriod" title="Período do relatório">
+    <option value="1">Dia (hoje)</option>
+    <option value="7" selected>Últimos 7 dias</option>
+    <option value="15">Últimos 15 dias</option>
+    <option value="30">Últimos 30 dias</option>
+  </select>
+  <button class="primary" id="genReport">Gerar relatório PDF</button>
 </div>
 <div class="date-row app-hidden" id="dateRowB">
   <span>Período B:</span>
@@ -153,6 +170,18 @@
 </div>
 <div id="content"><div class="empty">Carregando…</div></div>
 </div>
+
+<!-- container do relatório (fica fora da tela, é o que vira PDF) -->
+<div id="reportRoot"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+// fallback: se o CDN principal falhar, carrega de outro
+if(typeof html2pdf==='undefined'){
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js';
+  document.head.appendChild(s);
+}
+</script>
 
 <script>
 let clients=[], parsed=null;
@@ -426,6 +455,77 @@ document.getElementById('enterBtn').addEventListener('click',()=>{
   document.getElementById('welcome').style.display='none';
   document.getElementById('app').classList.remove('app-hidden');
 });
+
+// identifica o pior gargalo do funil (comparando cada taxa com o piso do benchmark)
+function worstBottleneck(d){
+  const checks=[
+    {nome:'PageView → Checkout', val:d.tPvIc, piso:5, cls:classifyPvCheckout(d.tPvIc)},
+    {nome:'Checkout → Payment', val:d.tIcPi, piso:40, cls:classifyCheckoutPayment(d.tIcPi)},
+    {nome:'Payment → Compra', val:d.tPiPur, piso:45, cls:classifyPaymentPurchase(d.tPiPur)},
+  ];
+  // pontua pela distância abaixo do piso (quanto mais abaixo, pior)
+  let pior=null,scoreMax=-Infinity;
+  checks.forEach(c=>{const score=(c.piso-c.val)/c.piso; if(score>scoreMax){scoreMax=score;pior=c;}});
+  return pior;
+}
+
+// gera o relatório em PDF para o período escolhido
+function generateReport(){
+  if(!parsed){alert('Dados ainda não carregados.');return;}
+  if(typeof html2pdf==='undefined'){alert('A biblioteca de PDF ainda está carregando. Aguarde alguns segundos e tente de novo.');return;}
+  const days=parseInt(document.getElementById('reportPeriod').value,10);
+  const ds=parsed.dates.map(x=>brToDate(x.label));
+  const last=ds[ds.length-1];
+  const start=new Date(last); start.setDate(start.getDate()-(days-1));
+  const d=derive(aggregate(start,last));
+  const clientName=clients[document.getElementById('clientSelect').selectedIndex]?.name||'Cliente';
+  const periodoTxt = days===1 ? 'Dia' : 'Últimos '+days+' dias';
+  const fmtD=x=>x.toLocaleDateString('pt-BR');
+  const gargalo=worstBottleneck(d);
+  const hoje=new Date().toLocaleDateString('pt-BR');
+
+  const gargaloBox = gargalo ? `
+    <div class="rep-title">Gargalo identificado</div>
+    <div class="tbl-wrap" style="margin-bottom:20px">
+      <div style="font-size:15px;font-weight:800;color:${gargalo.cls==='red'?'#ff3b52':gargalo.cls==='amber'?'#ffc400':'#00e676'}">
+        ${gargalo.nome} — ${fmtPct(gargalo.val)}</div>
+      <div style="color:#7d9a8a;font-size:13px;margin-top:6px">
+        Esta é a etapa com maior distância do benchmark saudável no período. É onde o funil mais perde eficiência e deve ser priorizada.</div>
+    </div>` : '';
+
+  const root=document.getElementById('reportRoot');
+  root.innerHTML = `
+    <div class="rep-head">
+      <h1>MYM<span class="dot">.</span></h1>
+      <div class="meta">Relatório de funil · ${clientName}<br>${periodoTxt} · ${fmtD(start)} a ${fmtD(last)}<br>Emitido em ${hoje}</div>
+    </div>
+    ${kpiRow(d)}
+    <div class="rep-title">Funil da jornada</div>
+    ${buildFunnel(d,false)}
+    ${gargaloBox}
+    ${buildActions(d)}
+    <div class="rep-title">Detalhamento</div>
+    ${buildTable(d)}
+  `;
+
+  const opt={
+    margin:[8,8,8,8],
+    filename:`Relatorio_${clientName}_${periodoTxt.replace(/ /g,'_')}.pdf`,
+    image:{type:'jpeg',quality:0.95},
+    html2canvas:{scale:2,backgroundColor:'#000000',useCORS:true},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+    pagebreak:{mode:['css','legacy']}
+  };
+  const btn=document.getElementById('genReport');
+  const txt=btn.textContent; btn.textContent='Gerando…'; btn.disabled=true;
+  html2pdf().set(opt).from(root).save().then(()=>{
+    btn.textContent=txt; btn.disabled=false; root.innerHTML='';
+  }).catch(e=>{
+    btn.textContent=txt; btn.disabled=false;
+    alert('Falha ao gerar PDF: '+e.message);
+  });
+}
+document.getElementById('genReport').addEventListener('click',generateReport);
 
 async function init(){
   try{
