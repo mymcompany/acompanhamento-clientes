@@ -31,39 +31,39 @@
   .kpi .val.green{color:var(--green)}
   .section-title{font-size:15px;font-weight:700;color:var(--txt-dim);margin:8px 0 18px}
   /* Funil estilo cápsula, chave à esquerda */
-  .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:40px 24px;margin-bottom:28px;overflow:hidden}
-  .funnel-inner{display:flex;flex-direction:column;align-items:center;gap:22px;position:relative}
-  /* cada linha centra a cápsula; a chave é ancorada em absoluto na borda esquerda dela */
-  .frow{position:relative;display:flex;justify-content:center;width:100%;max-width:640px}
+  .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:40px 30px;margin-bottom:28px;overflow:hidden}
+  .funnel-inner{max-width:720px;margin:0 auto}
+  /* linha = [ coluna chave fixa ][ coluna cápsula ]. Borda esquerda das cápsulas sempre no mesmo x */
+  .frow{position:relative;display:grid;grid-template-columns:110px 1fr;align-items:center;min-height:78px}
   .cap{
-    position:relative;
+    grid-column:2;
     background:linear-gradient(145deg,#12211a 0%,#0a130e 60%,#060c09 100%);
     border:1px solid #1d3327;border-radius:40px;
-    padding:20px 34px;display:flex;align-items:center;gap:12px;
+    padding:18px 32px;display:flex;align-items:center;gap:12px;
     box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(0,230,118,.08);
-    transition:width .3s;
   }
   .cap .value{font-weight:800;font-size:20px;color:var(--green)}
   .cap .sep{color:var(--neutral);font-weight:400;font-size:18px}
   .cap .name{font-weight:600;font-size:16px;color:var(--txt);white-space:nowrap}
-  /* conector: fica grudado na borda esquerda da cápsula, subindo pra abraçar o vão */
+  /* conector ocupa a coluna 1, encostado na cápsula; a chave estica no vão entre as linhas */
   .connector{
-    position:absolute;right:100%;top:-33px;bottom:auto;height:calc(100% + 44px);
-    display:flex;align-items:center;gap:6px;padding-right:6px;
+    grid-column:1;justify-self:end;align-self:stretch;
+    display:flex;align-items:center;gap:7px;padding-right:8px;
+    position:relative;z-index:2;
   }
-  .connector .brace-pcts{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
   .connector .p-main{font-size:15px;font-weight:800;white-space:nowrap}
-  .connector .p-sub{font-size:11px;color:var(--txt-dim);font-weight:600}
-  .connector svg{display:block;flex-shrink:0;height:100%}
+  .connector svg{display:block;flex-shrink:0;height:64px}
   .p-main.neutral{color:var(--neutral)}
   .p-main.red{color:var(--red)}
   .p-main.amber{color:var(--amber)}
   .p-main.greenlight{color:var(--green)}
   .p-main.greendeep{color:var(--green)}
-  @media(max-width:760px){
-    .cap{padding:16px 22px}
-    .cap .value{font-size:17px}.cap .name{font-size:14px}
-    .connector .p-main{font-size:13px}
+  @media(max-width:640px){
+    .frow{grid-template-columns:84px 1fr;min-height:66px}
+    .cap{padding:14px 20px}
+    .cap .value{font-size:16px}.cap .name{font-size:13px}
+    .connector .p-main{font-size:12px}
+    .connector svg{height:50px}
   }
   .actions{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:24px}
   .actions h2{font-size:16px;font-weight:800;margin-bottom:4px}
@@ -200,26 +200,24 @@ function render(){
     {p:tIcPi,cls:classifyCheckoutPayment(tIcPi),l:'Checkout → Payment'},
     {p:tPiPur,cls:classifyPaymentPurchase(tPiPur),l:'Payment → Compra'},
   ];
-  const maxW=520, minW=310, n=stages.length;
-  // chave "{" que estica pra altura do conector (abraça o vão entre etapas)
+  // chave "{" que estica na altura entre etapas
   function braceSVG(color){
-    return `<svg width="16" viewBox="0 0 16 100" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-      <path d="M12 1 C 5 1, 10 48, 2 50 C 10 52, 5 99, 12 99"
-        stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    return `<svg width="14" viewBox="0 0 14 100" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <path d="M11 1 C 4 1, 9 48, 2 50 C 9 52, 4 99, 11 99"
+        stroke="${color}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
     </svg>`;
   }
   const colorMap={neutral:'#5a6b62',red:'#ff3b52',amber:'#ffc400',greenlight:'#00e676',greendeep:'#00e676'};
 
   let rows='';
   stages.forEach((st,i)=>{
-    const w=Math.round(maxW-(maxW-minW)*(i/(n-1)));
     const t = i>0 ? trans[i-1] : null;
     const connector = t
-      ? `<div class="connector"><div class="brace-pcts"><span class="p-main ${t.cls}">${fmtPct(t.p)}</span></div>${braceSVG(colorMap[t.cls])}</div>`
+      ? `<div class="connector"><span class="p-main ${t.cls}">${fmtPct(t.p)}</span>${braceSVG(colorMap[t.cls])}</div>`
       : '';
     rows+=`<div class="frow">
-      <div class="cap" style="width:${w}px">
-        ${connector}
+      ${connector}
+      <div class="cap">
         <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
       </div>
     </div>`;
