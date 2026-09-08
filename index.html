@@ -234,56 +234,77 @@ function buildFunnel(d,compact){
 }
 
 // linhas da tabela: [rótulo, valor formatado] — funil + custos
-function tableRows(d){
-  return [
-    ['Investimento',fmtBRL(d.invest),d.invest],
-    ['Impressões',fmtInt(d.imp),d.imp],
-    ['Cliques',fmtInt(d.clk),d.clk],
-    ['PageView',fmtInt(d.pv),d.pv],
-    ['Initiate Checkout',fmtInt(d.ic),d.ic],
-    ['Payment Info',fmtInt(d.pi),d.pi],
-    ['Purchase',fmtInt(d.pur),d.pur],
-    ['Faturamento',fmtBRL(d.rev),d.rev],
-    ['ROAS',d.roas.toFixed(2),d.roas],
-    ['Ticket médio',fmtBRL(d.ticket),d.ticket],
-    ['CAC',fmtBRL(d.cac),d.cac],
-    ['CPC',fmtBRL(d.cpc),d.cpc],
-    ['Custo / PageView',fmtBRL(d.custoPv),d.custoPv],
-    ['Custo / Checkout',fmtBRL(d.custoIc),d.custoIc],
-    ['Custo / Payment',fmtBRL(d.custoPi),d.custoPi],
-  ];
+// grupos de métricas: cada um vira uma tabela separada
+function tableGroups(d){
+  return {
+    'Dados gerais':[
+      ['Investimento',fmtBRL(d.invest),d.invest,'brl'],
+      ['Impressões',fmtInt(d.imp),d.imp,'int'],
+      ['Cliques',fmtInt(d.clk),d.clk,'int'],
+      ['PageView',fmtInt(d.pv),d.pv,'int'],
+      ['Initiate Checkout',fmtInt(d.ic),d.ic,'int'],
+      ['Payment Info',fmtInt(d.pi),d.pi,'int'],
+      ['Purchase',fmtInt(d.pur),d.pur,'int'],
+      ['Faturamento',fmtBRL(d.rev),d.rev,'brl'],
+      ['ROAS',d.roas.toFixed(2),d.roas,'ratio'],
+      ['Ticket médio',fmtBRL(d.ticket),d.ticket,'brl'],
+    ],
+    'Custos':[
+      ['CPC',fmtBRL(d.cpc),d.cpc,'cost'],
+      ['Custo / PageView',fmtBRL(d.custoPv),d.custoPv,'cost'],
+      ['Custo / Checkout',fmtBRL(d.custoIc),d.custoIc,'cost'],
+      ['Custo / Payment',fmtBRL(d.custoPi),d.custoPi,'cost'],
+      ['CAC',fmtBRL(d.cac),d.cac,'cost'],
+    ],
+    'Taxas de conversão':[
+      ['CTR (Cliques / Impr.)',fmtPct(d.tImpClk),d.tImpClk,'pct'],
+      ['PageView / Cliques',fmtPct(d.tClkPv),d.tClkPv,'pct'],
+      ['Checkout / PageView',fmtPct(d.tPvIc),d.tPvIc,'pct'],
+      ['Payment / Checkout',fmtPct(d.tIcPi),d.tIcPi,'pct'],
+      ['Compra / Payment',fmtPct(d.tPiPur),d.tPiPur,'pct'],
+    ],
+  };
 }
-// métricas de volume (soma) têm média = total/dias; métricas de razão não têm média útil
-const isVolume={'Investimento':1,'Impressões':1,'Cliques':1,'PageView':1,'Initiate Checkout':1,'Payment Info':1,'Purchase':1,'Faturamento':1};
-function fmtLike(label,val){
-  if(label==='ROAS')return val.toFixed(2);
-  if(label.startsWith('Investimento')||label.startsWith('Faturamento')||label.startsWith('Ticket')||label.startsWith('CAC')||label.startsWith('CPC')||label.startsWith('Custo'))return fmtBRL(val);
+// só métricas de volume (int/brl somável) têm média/dia; ratio, cost e pct não
+const hasAvg={'int':1,'brl':1};
+function fmtByKind(kind,val){
+  if(kind==='ratio')return val.toFixed(2);
+  if(kind==='pct')return fmtPct(val);
+  if(kind==='brl'||kind==='cost')return fmtBRL(val);
   return fmtInt(val);
 }
 function buildTable(d){
-  const r=tableRows(d);
-  const body=r.map(([label,fmt,raw])=>{
-    const media = isVolume[label] ? fmtLike(label, raw/d.days) : '—';
-    return `<tr><td class="metric">${label}</td><td>${fmt}</td><td>${media}</td></tr>`;
-  }).join('');
-  return `<div class="tbl-wrap"><h3>Dados do período (${d.days} dia${d.days>1?'s':''})</h3>
-    <table><thead><tr><th>Métrica</th><th>Total</th><th>Média/dia</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  const groups=tableGroups(d);
+  let out=`<div class="section-title">Dados do período (${d.days} dia${d.days>1?'s':''})</div>`;
+  for(const [title,rows] of Object.entries(groups)){
+    const body=rows.map(([label,fmt,raw,kind])=>{
+      const media = hasAvg[kind] ? fmtByKind(kind, raw/d.days) : '—';
+      return `<tr><td class="metric">${label}</td><td>${fmt}</td><td>${media}</td></tr>`;
+    }).join('');
+    out+=`<div class="tbl-wrap"><h3>${title}</h3>
+      <table><thead><tr><th>Métrica</th><th>Total</th><th>Média/dia</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  return out;
 }
 function buildCompareTable(a,b){
-  const ra=tableRows(a), rb=tableRows(b);
-  const body=ra.map(([label,fmtA,rawA],idx)=>{
-    const rawB=rb[idx][2], fmtB=rb[idx][1];
-    let delta='—',cls='delta-zero';
-    if(rawA>0){const dv=(rawB-rawA)/rawA*100;
-      // pra ROAS/faturamento/vendas subir é bom; pra custos subir é ruim
-      const lowerBetter=label.startsWith('CAC')||label.startsWith('CPC')||label.startsWith('Custo');
-      const good = lowerBetter ? dv<0 : dv>0;
-      cls = Math.abs(dv)<0.05?'delta-zero':(good?'delta-pos':'delta-neg');
-      delta=(dv>0?'+':'')+dv.toFixed(1)+'%';}
-    return `<tr><td class="metric">${label}</td><td>${fmtA}</td><td>${fmtB}</td><td class="${cls}">${delta}</td></tr>`;
-  }).join('');
-  return `<div class="tbl-wrap"><h3>Comparativo A × B</h3>
-    <table><thead><tr><th>Métrica</th><th>Período A</th><th>Período B</th><th>Variação</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  const ga=tableGroups(a), gb=tableGroups(b);
+  let out=`<div class="section-title">Comparativo A × B</div>`;
+  for(const title of Object.keys(ga)){
+    const ra=ga[title], rb=gb[title];
+    const body=ra.map(([label,fmtA,rawA,kind],idx)=>{
+      const rawB=rb[idx][2], fmtB=rb[idx][1];
+      let delta='—',cls='delta-zero';
+      if(rawA>0){const dv=(rawB-rawA)/rawA*100;
+        const lowerBetter=(kind==='cost'); // custo subir é ruim; resto subir é bom
+        const good = lowerBetter ? dv<0 : dv>0;
+        cls = Math.abs(dv)<0.05?'delta-zero':(good?'delta-pos':'delta-neg');
+        delta=(dv>0?'+':'')+dv.toFixed(1)+'%';}
+      return `<tr><td class="metric">${label}</td><td>${fmtA}</td><td>${fmtB}</td><td class="${cls}">${delta}</td></tr>`;
+    }).join('');
+    out+=`<div class="tbl-wrap"><h3>${title}</h3>
+      <table><thead><tr><th>Métrica</th><th>Período A</th><th>Período B</th><th>Variação</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  return out;
 }
 
 function kpiRow(d){
