@@ -33,21 +33,10 @@
   /* Funil estilo cápsula, chave à esquerda */
   .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:40px 24px;margin-bottom:28px;overflow:hidden}
   .funnel-inner{display:flex;flex-direction:column;align-items:center;gap:22px;position:relative}
-  .frow{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;width:100%;max-width:760px;column-gap:0}
-  /* coluna da chave (esquerda) */
-  .brace-col{display:flex;align-items:center;justify-content:flex-end;height:100%;position:relative;padding-right:6px}
-  .brace-pcts{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15;margin-right:6px}
-  .brace-pcts .p-main{font-size:15px;font-weight:800}
-  .brace-pcts .p-sub{font-size:11px;color:var(--txt-dim);font-weight:600}
-  .p-main.neutral{color:var(--neutral)}
-  .p-main.red{color:var(--red)}
-  .p-main.amber{color:var(--amber)}
-  .p-main.greenlight{color:var(--green)}
-  .p-main.greendeep{color:var(--green)}
-  .brace-col svg{display:block;flex-shrink:0}
-  /* cápsula */
-  .cap-col{display:flex;justify-content:center}
+  /* cada linha centra a cápsula; a chave é ancorada em absoluto na borda esquerda dela */
+  .frow{position:relative;display:flex;justify-content:center;width:100%;max-width:640px}
   .cap{
+    position:relative;
     background:linear-gradient(145deg,#12211a 0%,#0a130e 60%,#060c09 100%);
     border:1px solid #1d3327;border-radius:40px;
     padding:20px 34px;display:flex;align-items:center;gap:12px;
@@ -57,10 +46,24 @@
   .cap .value{font-weight:800;font-size:20px;color:var(--green)}
   .cap .sep{color:var(--neutral);font-weight:400;font-size:18px}
   .cap .name{font-weight:600;font-size:16px;color:var(--txt);white-space:nowrap}
+  /* conector: fica grudado na borda esquerda da cápsula, subindo pra abraçar o vão */
+  .connector{
+    position:absolute;right:100%;top:-33px;bottom:auto;height:calc(100% + 44px);
+    display:flex;align-items:center;gap:6px;padding-right:6px;
+  }
+  .connector .brace-pcts{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+  .connector .p-main{font-size:15px;font-weight:800;white-space:nowrap}
+  .connector .p-sub{font-size:11px;color:var(--txt-dim);font-weight:600}
+  .connector svg{display:block;flex-shrink:0;height:100%}
+  .p-main.neutral{color:var(--neutral)}
+  .p-main.red{color:var(--red)}
+  .p-main.amber{color:var(--amber)}
+  .p-main.greenlight{color:var(--green)}
+  .p-main.greendeep{color:var(--green)}
   @media(max-width:760px){
-    .frow{grid-template-columns:96px minmax(0,1fr)}
     .cap{padding:16px 22px}
     .cap .value{font-size:17px}.cap .name{font-size:14px}
+    .connector .p-main{font-size:13px}
   }
   .actions{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:24px}
   .actions h2{font-size:16px;font-weight:800;margin-bottom:4px}
@@ -197,12 +200,12 @@ function render(){
     {p:tIcPi,cls:classifyCheckoutPayment(tIcPi),l:'Checkout → Payment'},
     {p:tPiPur,cls:classifyPaymentPurchase(tPiPur),l:'Payment → Compra'},
   ];
-  const maxW=560, minW=300, n=stages.length;
-  // chave "{" desenhada em SVG, apontando para a direita (abraça o vão entre etapas)
+  const maxW=520, minW=310, n=stages.length;
+  // chave "{" que estica pra altura do conector (abraça o vão entre etapas)
   function braceSVG(color){
-    return `<svg width="20" height="70" viewBox="0 0 20 70" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-      <path d="M14 2 C 6 2, 12 33, 2 35 C 12 37, 6 68, 14 68"
-        stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    return `<svg width="16" viewBox="0 0 16 100" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <path d="M12 1 C 5 1, 10 48, 2 50 C 10 52, 5 99, 12 99"
+        stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
     </svg>`;
   }
   const colorMap={neutral:'#5a6b62',red:'#ff3b52',amber:'#ffc400',greenlight:'#00e676',greendeep:'#00e676'};
@@ -210,17 +213,14 @@ function render(){
   let rows='';
   stages.forEach((st,i)=>{
     const w=Math.round(maxW-(maxW-minW)*(i/(n-1)));
-    // a chave que aparece ANTES desta etapa é a transição da etapa anterior -> esta
     const t = i>0 ? trans[i-1] : null;
-    const braceCell = t
-      ? `<div class="brace-pcts"><span class="p-main ${t.cls}">${fmtPct(t.p)}</span></div>${braceSVG(colorMap[t.cls])}`
+    const connector = t
+      ? `<div class="connector"><div class="brace-pcts"><span class="p-main ${t.cls}">${fmtPct(t.p)}</span></div>${braceSVG(colorMap[t.cls])}</div>`
       : '';
     rows+=`<div class="frow">
-      <div class="brace-col">${braceCell}</div>
-      <div class="cap-col">
-        <div class="cap" style="width:${w}px">
-          <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
-        </div>
+      <div class="cap" style="width:${w}px">
+        ${connector}
+        <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
       </div>
     </div>`;
   });
