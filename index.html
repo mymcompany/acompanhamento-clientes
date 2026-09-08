@@ -31,39 +31,37 @@
   .kpi .val.green{color:var(--green)}
   .section-title{font-size:15px;font-weight:700;color:var(--txt-dim);margin:8px 0 18px}
   /* Funil estilo cápsula, chave à esquerda */
-  .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:40px 30px;margin-bottom:28px;overflow:hidden}
-  .funnel-inner{max-width:720px;margin:0 auto}
-  /* linha = [ coluna chave fixa ][ coluna cápsula ]. Borda esquerda das cápsulas sempre no mesmo x */
-  .frow{position:relative;display:grid;grid-template-columns:110px 1fr;align-items:center;min-height:78px}
+  .funnel{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:36px 24px;margin-bottom:28px;overflow:hidden}
+  .funnel-inner{display:flex;flex-direction:column;align-items:center;gap:0}
+  /* cápsula afunilada, centralizada */
   .cap{
-    grid-column:2;
     background:linear-gradient(145deg,#12211a 0%,#0a130e 60%,#060c09 100%);
-    border:1px solid #1d3327;border-radius:40px;
-    padding:18px 32px;display:flex;align-items:center;gap:12px;
-    box-shadow:0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(0,230,118,.08);
+    border:1px solid #1d3327;border-radius:16px;
+    padding:18px 30px;display:flex;align-items:center;justify-content:center;gap:12px;
+    box-shadow:0 6px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(0,230,118,.08);
   }
   .cap .value{font-weight:800;font-size:20px;color:var(--green)}
   .cap .sep{color:var(--neutral);font-weight:400;font-size:18px}
   .cap .name{font-weight:600;font-size:16px;color:var(--txt);white-space:nowrap}
-  /* conector ocupa a coluna 1, encostado na cápsula; a chave estica no vão entre as linhas */
-  .connector{
-    grid-column:1;justify-self:end;align-self:stretch;
-    display:flex;align-items:center;gap:7px;padding-right:8px;
-    position:relative;z-index:2;
+  /* taxa entre etapas: pílula centralizada no vão, com seta apontando pra baixo */
+  .rate{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:8px 0;position:relative;z-index:2;
   }
-  .connector .p-main{font-size:15px;font-weight:800;white-space:nowrap}
-  .connector svg{display:block;flex-shrink:0;height:64px}
-  .p-main.neutral{color:var(--neutral)}
-  .p-main.red{color:var(--red)}
-  .p-main.amber{color:var(--amber)}
-  .p-main.greenlight{color:var(--green)}
-  .p-main.greendeep{color:var(--green)}
+  .rate .pill{
+    font-size:14px;font-weight:800;padding:4px 14px;border-radius:20px;
+    border:1.5px solid;display:inline-flex;align-items:center;gap:6px;
+  }
+  .rate .pill .lbl{font-size:10px;font-weight:600;opacity:.7}
+  .pill.neutral{color:var(--neutral);border-color:#2a3a32;background:#0c1410}
+  .pill.red{color:var(--red);border-color:var(--red);background:rgba(255,59,82,.08)}
+  .pill.amber{color:var(--amber);border-color:var(--amber);background:rgba(255,196,0,.08)}
+  .pill.greenlight{color:var(--green);border-color:var(--green);background:rgba(0,230,118,.06)}
+  .pill.greendeep{color:#00160b;border-color:var(--green);background:var(--green)}
   @media(max-width:640px){
-    .frow{grid-template-columns:84px 1fr;min-height:66px}
-    .cap{padding:14px 20px}
+    .cap{padding:14px 18px}
     .cap .value{font-size:16px}.cap .name{font-size:13px}
-    .connector .p-main{font-size:12px}
-    .connector svg{height:50px}
+    .rate .pill{font-size:12px}
   }
   .actions{background:var(--panel);border:1px solid var(--panel-line);border-radius:18px;padding:24px}
   .actions h2{font-size:16px;font-weight:800;margin-bottom:4px}
@@ -200,26 +198,18 @@ function render(){
     {p:tIcPi,cls:classifyCheckoutPayment(tIcPi),l:'Checkout → Payment'},
     {p:tPiPur,cls:classifyPaymentPurchase(tPiPur),l:'Payment → Compra'},
   ];
-  // chave "{" que estica na altura entre etapas
-  function braceSVG(color){
-    return `<svg width="14" viewBox="0 0 14 100" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-      <path d="M11 1 C 4 1, 9 48, 2 50 C 9 52, 4 99, 11 99"
-        stroke="${color}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-    </svg>`;
-  }
-  const colorMap={neutral:'#5a6b62',red:'#ff3b52',amber:'#ffc400',greenlight:'#00e676',greendeep:'#00e676'};
-
+  const maxW=560, minW=300, n=stages.length;
+  const rateLabels=['Cliques / Impr.','PageView / Cliques','Checkout / PageView','Payment / Checkout','Compra / Payment'];
   let rows='';
   stages.forEach((st,i)=>{
-    const t = i>0 ? trans[i-1] : null;
-    const connector = t
-      ? `<div class="connector"><span class="p-main ${t.cls}">${fmtPct(t.p)}</span>${braceSVG(colorMap[t.cls])}</div>`
-      : '';
-    rows+=`<div class="frow">
-      ${connector}
-      <div class="cap">
-        <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
-      </div>
+    const w=Math.round(maxW-(maxW-minW)*(i/(n-1)));
+    // pílula de taxa ANTES desta etapa (transição da anterior -> esta)
+    if(i>0){
+      const t=trans[i-1];
+      rows+=`<div class="rate"><span class="pill ${t.cls}">${fmtPct(t.p)} <span class="lbl">${rateLabels[i-1]}</span></span></div>`;
+    }
+    rows+=`<div class="cap" style="width:${w}px">
+      <span class="value">${fmtInt(st.v)}</span><span class="sep">|</span><span class="name">${st.n}</span>
     </div>`;
   });
   const funnel=`<div class="section-title">Funil — jornada completa</div><div class="funnel"><div class="funnel-inner">${rows}</div></div>`;
